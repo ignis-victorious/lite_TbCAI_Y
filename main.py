@@ -1,140 +1,74 @@
 #
 #  Import LIBRARIES
 import sqlite3
-from sqlite3 import Connection, Cursor, Row
+import sys
+from sqlite3 import Connection
 
 #  Import FILES
 #  ______________________
 #
+# QUERIES - Terminal
+# uv run main.py setup
+# sqlite3 -header -column shopping.db "SELECT * FROM products;"
+# uv run main.py add
+# sqlite3 -header -column shopping.db "SELECT * FROM products;"
+# uv run main.py update
+# sqlite3 -header -column shopping.db "SELECT * FROM products;"
+# uv run main.py delete
+# sqlite3 -header -column shopping.db "SELECT * FROM products;"
 
 
-DB_NAME: str = "employees.db"
+DB_NAME: str = "shopping.db"
 
 
-def get_connection() -> Connection:
+def setup() -> None:
     conn: Connection = sqlite3.connect(database=DB_NAME)
-    conn.row_factory = sqlite3.Row
-    return conn
+    conn.execute("""CREATE TABLE IF NOT EXISTS products (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, 
+        name TEXT NOT NULL, 
+        price REAL NOT NULL
+        ) 
+    """)
+    conn.executemany(
+        "INSERT INTO products (name, price) VALUES (?, ?)",
+        [("Laptop", 999.99), ("Coffee Mug", 12.99), ("Python Book", 39.99), ("Keyboard", 79.99)],
+    )
+    conn.commit()
+    conn.close()
+    print("Created 4 products.")
 
 
-def create_table() -> None:
-    with get_connection() as conn:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS employees(
-                id INTEGER PRIMARY KEY AUTOINCREMENT, 
-                name TEXT NOT NULL, 
-                department TEXT NOT NULL,
-                salary REAL NOT NULL, 
-                active INTEGER DEFAULT 1
-                )
-        """)
-        conn.commit()
-    print("Table ready.")
+def add() -> None:
+    conn: Connection = sqlite3.connect(database=DB_NAME)
+    conn.execute("INSERT INTO products (name, price) VALUES (?, ?)", ("Headphones", 59.99))
+    conn.commit()
+    conn.close()
+    print("Added Headphones ($59.99) ")
 
 
-def add_employee(name, department, salary) -> int | None:
-    with get_connection() as conn:
-        cursor: Cursor = conn.execute(
-            "INSERT INTO employees (name, department, salary) VALUES (?, ?,?)", (name, department, salary)
-        )
-        conn.commit()
-        return cursor.lastrowid
+def update() -> None:
+    conn: Connection = sqlite3.connect(database=DB_NAME)
+    conn.execute("UPDATE products SET price = ? WHERE name = ?", (899.99, "Laptop"))
+    conn.commit()
+    conn.close()
+    print("Updated Laptop to $899.99")
 
 
-def list_employees() -> list[Row]:
-    with get_connection() as conn:
-        rows: list[Row] = conn.execute("SELECT * FROM employees WHERE active = 1 ORDER BY name").fetchall()
-        return rows
-
-
-def update_salary(name, new_salary) -> int:
-    with get_connection() as conn:
-        cursor: Cursor = conn.execute(
-            "UPDATE employees SET salary = ? WHERE name = ? AND active = 1", (new_salary, name)
-        )
-        conn.commit()
-        return cursor.rowcount
-
-
-def delete_employee(name) -> int:
-    with get_connection() as conn:
-        cursor: Cursor = conn.execute("UPDATE employees SET active = 0 WHERE name = ? AND active = 1", (name,))
-        conn.commit()
-        return cursor.rowcount
-
-
-def search_by_department(department) -> list[Row]:
-    with get_connection() as conn:
-        rows: list[Row] = conn.execute(
-            "SELECT name, salary FROM employees WHERE department = ? AND active = 1 ORDER BY salary DESC", (department,)
-        ).fetchall()
-        return rows
-
-
-def get_department_stats() -> list[Row]:
-    with get_connection() as conn:
-        rows: list[Row] = conn.execute("""
-            SELECT department, COUNT (*) as count,
-            AVG (salary) as avg_salary, 
-            MIN (salary) as min_salary, 
-            MAX (salary) as max_salary
-            FROM empLoyees WHERE active = 1
-            GROUP BY department ORDER BY avg_salary DESC
-        """).fetchall()
-        return rows
+def delete() -> None:
+    conn: Connection = sqlite3.connect(database=DB_NAME)
+    conn.execute("DELETE FROM products WHERE name = ?", ("Coffee Mug",))
+    conn.commit()
+    conn.close()
+    print("Deleted Coffee Mug")
 
 
 if __name__ == "__main__":
-    import os
-
-    if os.path.exists(path=DB_NAME):
-        os.remove(path=DB_NAME)
-
-    create_table()
-
-    # Seed empLoyees
-    print("\n=== Adding Employees ===")
-    employees: list[tuple[str, str, int]] = [
-        ("Tony Stark", "Engineering", 250000),
-        ("Pepper Potts", "Management", 180000),
-        ("Happy Hogan", "Security", 95000),
-        ("James Rhodes", "Engineering", 160000),
-        ("Peter Parker", "Engineering", 85000),
-        ("Natasha Romanoff", "Security", 145000),
-    ]
-    for name, dept, salary in employees:
-        emp_id: int | None = add_employee(name=name, department=dept, salary=salary)
-        print(f" Added {name} (id: {emp_id})")
-
-    # List all
-    print("\n=== All Employees ===")
-    for emp in list_employees():
-        print(f"l{emp['name']:20s} | {emp['department']:12s} | ${emp['salary']:>10,.2f}")
-
-    # Update salary
-    print("\n=== Salary Update ===")
-    updated: int = update_salary(name="Peter Parker", new_salary=110000)
-    print(f" Updated {updated} row(s): Peter Parker - $110, 000")
-
-    # Search by department
-    print("\n=== Engineering Team ===")
-    for emp in search_by_department("Engineering"):
-        print(f" {emp['name']:20s} | ${emp['salary']:>10,.2f}")
-
-    # Delete employee
-    print("\n=== Remove Employee ===")
-    removed = delete_employee("Happy Hogan")
-    print(f" Removed {removed} row(s): Happy Hogan")
-
-    # Department stats
-    print("\n=== Department Stats ===")
-    for dept in get_department_stats():
-        print(
-            f" {dept['department']:12s} | {dept['count']} employees | avg ${dept['avg_salary']:>10,.2f} | range ${dept['min_salary']:>10,.2f} - ${dept['max_salary']:>10,.2f}"
-        )
-
-    # Final count
-    print(f"\n=== Active Employees: {len(list_employees())} ===")
+    actions = {"setup": setup, "add": add, "update": update, "delete": delete}
+    action: str = sys.argv[1] if len(sys.argv) > 1 else "setup"
+    if action in actions:
+        actions[action]()
+    else:
+        print("Usage: python3 shopping_crud.py [setup |add|update|deletel")
 
 
 #
