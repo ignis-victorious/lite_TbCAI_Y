@@ -1,103 +1,145 @@
 #
 #  Import LIBRARIES
 import sqlite3
-from sqlite3 import Cursor
+from sqlite3 import Connection, Cursor
 
 #  Import FILES
 #  ______________________
 #
 
 
-# Context manager handles commit and close
-with sqlite3.connect("products.db") as conn:
-    # Dict-like row access
+DB_NAME: str = "employees. db"
+
+
+def get_connection() -> Connection:
+    conn: Connection = sqlite3.connect(database=DB_NAME)
     conn.row_factory = sqlite3.Row
-    cursor: Cursor = conn.cursor()
+    return conn
 
-    # Create table
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS products ( 
-            id INTEGER PRIMARY KEY AUTOINCREMENT, 
-            name TEXT NOT NULL, 
-            category TEXT NOT NULL, 
-            price REAL NOT NULL, 
-            in_stock INTEGER DEFAULT 1
-            )
-    """)
 
-    # Clear and seed data
-    cursor.execute("DELETE FROM products")
-    products: list[tuple[str, str, float, int]] = [
-        ("Laptop", "Electronics", 999.99, 1),
-        ("Headphones", "Electronics", 79.99, 1),
-        ("'USB Cable", "Electronics", 12.99, 11),
-        ("Python Crash Course", "Books", 35.99, 9),
-        ("Clean Code", "Books", 42.50, 0),
-        ("Winter Jacket", "Clothing", 89.99, 1),
-        ("Running Shoes", "Clothing", 64.99, 8),
+def create_table() -> None:
+    with get_connection() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS employees(
+                id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                name TEXT NOT NULL, 
+                department TEXT NOT NULL,
+                salary REAL NOT NULL, 
+                active INTEGER DEFAULT 1
+                )
+        """)
+        conn.commit()
+    print("Table ready.")
+
+
+def add_employee(name, department, salary) -> int | None:
+    with get_connection() as conn:
+        cursor: Cursor = conn.execute(
+            "INSERT INTO employees (name, department, salary) VALUES (?, ?,?)", (name, department, salary)
+        )
+        conn.commit()
+        return cursor.lastrowid
+
+
+def list_employees() -> list[float | int | str]:
+    with get_connection() as conn:
+        rows: list[int | str | float] = conn.execute(
+            "SELECT * FROM employees WHERE active = 1 ORDER BY name"
+        ).fetchall()
+        return rows
+
+
+def update_salary(name, new_salary) -> int:
+    with get_connection() as conn:
+        cursor: Cursor = conn.execute(
+            "UPDATE employees SET salary = ? WHERE name = ? AND active = 1", (new_salary, name)
+        )
+        conn.commit()
+        return cursor.rowcount
+
+
+def delete_employee(name) -> int:
+    with get_connection() as conn:
+        cursor: Cursor = conn.execute("UPDATE employees SET active = 0 WHERE name = ? AND active = 1", (name,))
+        conn.commit()
+        return cursor.rowcount
+
+
+def search_by_department(department) -> list[float | str]:
+    with get_connection() as conn:
+        rows: list[str | float] = conn.execute(
+            "SELECT name, salary FROM employees WHERE department = ? AND active = 1 ORDER BY salary DESC", (department,)
+        ).fetchall()
+        return rows
+
+
+def get_department_stats() -> list[float | str]:
+    with get_connection() as conn:
+        rows: list[str | float] = conn.execute("""
+            SELECT department, COUNT (*) as count,
+            AVG (salary) as avg_salary, 
+            MIN (salary) as min_salary, 
+            MAX (salary) as max_salary
+            FROM empLoyees WHERE active = 1
+            GROUP BY department ORDER BY avg_salary DESC
+        """).fetchall()
+        return rows
+
+
+if __name__ == "__main__":
+    import os
+
+    if os.path.exists(path=DB_NAME):
+        os.remove(path=DB_NAME)
+
+    create_table()
+
+    # Seed empLoyees
+    print("\n=== Adding Employees ===")
+    employees: list[tuple[str, str, int]] = [
+        ("Tony Stark", "Engineering", 250000),
+        ("Pepper Potts", "Management", 180000),
+        ("Happy Hogan", "Security", 95000),
+        ("James Rhodes", "Engineering", 160000),
+        ("Peter Parker", "Engineering", 85000),
+        ("Natasha Romanoff", "Security", 145000),
     ]
-    cursor.executemany("INSERT INTO products (name, category, price, in_stock) VALUES (?, ?, ?,?)", products)
-    conn.commit()
-    print("=== Seeded 7 Products ===")
+    for name, dept, salary in employees:
+        emp_id: int | None = add_employee(name=name, department=dept, salary=salary)
+        print(f" Added {name} (id: {emp_id})")
 
-    # WHERE clause
-    print("\n=== Products Over $50 ===")
-    cursor.execute("SELECT name, price FROM products WHERE price > ?", (50,))
-    for row in cursor.fetchall():
-        print(f" {row['name']}: ${row['price']:.2f}")
+    # List all
+    print("\n=== All Employees ===")
+    for emp in list_employees():
+        print(f"l{emp['name']:20s} | {emp['department']:12s} | ${emp['salary']:>10,.2f}")
 
-    # ORDER BY with LIMIT
-    print("\n=== Top 3 Most Expensive ==")
-    cursor.execute("SELECT name, price FROM products ORDER BY price DESC LIMIT 3")
-    for row in cursor.fetchall():
-        print(f" {row['name']}: ${row['price']:.2f}")
+    # Update salary
+    print("\n=== Salary Update ===")
+    updated: int = update_salary(name="Peter Parker", new_salary=110000)
+    print(f" Updated {updated} row(s): Peter Parker - $110, 000")
 
-    # UPDATE
-    print("\n=== Update Price ===")
-    cursor.execute("UPDATE products SET price = ? WHERE name = ?", (69.99, "Headphones"))
-    conn.commit()
-    print(f"Updated {cursor.rowcount} row(s)")
-    cursor.execute("SELECT name, price FROM products WHERE name = ?", ("Headphones",))
-    row = cursor.fetchone()
-    print(f" {row['name']} new price: ${row['price']:.2f}")
+    # Search by department
+    print("\n=== Engineering Team ===")
+    for emp in search_by_department("Engineering"):
+        print(f" {emp['name']:20s} | ${emp['salary']:>10,.2f}")
 
-    # DELETE
-    print("\n=== Delete Out-of-Stock ===")
-    cursor.execute("DELETE FROM products WHERE in_stock = 0")
-    conn.commit()
-    print(f" Deleted {cursor.rowcount} row(s) ")
+    # Delete employee
+    print("\n=== Remove Employee ===")
+    removed = delete_employee("Happy Hogan")
+    print(f" Removed {removed} row(s): Happy Hogan")
 
-    # Aggregate functions
-    print("\n=== Aggregate Stats ===")
-    cursor.execute(
-        "SELECT COUNT (*) as total, AVG(price) as avg_price, MIN (price) as cheapest, MAX (price) as priciest FROM products"
-    )
-    stats: dict[str, int | float] = cursor.fetchone()  # This tuple[int, float, float, float] is not valid as this is
-    print(f" Total: {stats['total']} products")
-    print(f"Average: ${stats['avg_price']: 2f}")
-    print(f"Cheapest: ${stats['cheapest']:.2f}")
-    print(f" Most expensive: ${stats['priciest']:.2f}")
+    # Department stats
+    print("\n=== Department Stats ===")
+    for dept in get_department_stats():
+        print(
+            f"    {dept['department']:12s} |    {dept['count']} employees | avg ${dept['avg_salary']:>10,.2f} | range ${dept['min_salary']:>10,.2f} - ${dept['max_salary']:>10,.2f}"
+        )
 
-    # GROUP BY
-    print("\n=== Products by Category ===")
-    cursor.execute("SELECT category, COUNT (*) as count, AVG(price) as avg_price FROM products GROUP BY category")
-    for row in cursor.fetchall():
-        print(f"  {row['category']}: {row['count']} items, avg ${row['avg_price']:.2f}")
-        print("\nDone. ")
+    # Final count
+    print(f"\n=== Active Employees: {len(list_employees())} ===")
 
-    # Close connection
-    # conn.close()
-    # print("\nDatabase closed.")
 
 #
 #  Import FILES LIBRARIES
 #  ______________________
 #
-
-
-# def main():
-#     print("Hello from lite-tbcai-y!")
-
-
-# if __name__ == "__main__":
-#     main()
