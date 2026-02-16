@@ -1,14 +1,14 @@
 #
 #  Import LIBRARIES
 import sqlite3
-from sqlite3 import Connection, Cursor
+from sqlite3 import Connection, Cursor, Row
 
 #  Import FILES
 #  ______________________
 #
 
 
-DB_NAME: str = "employees. db"
+DB_NAME: str = "employees.db"
 
 
 def get_connection() -> Connection:
@@ -41,11 +41,9 @@ def add_employee(name, department, salary) -> int | None:
         return cursor.lastrowid
 
 
-def list_employees() -> list[float | int | str]:
+def list_employees() -> list[Row]:
     with get_connection() as conn:
-        rows: list[int | str | float] = conn.execute(
-            "SELECT * FROM employees WHERE active = 1 ORDER BY name"
-        ).fetchall()
+        rows: list[Row] = conn.execute("SELECT * FROM employees WHERE active = 1 ORDER BY name").fetchall()
         return rows
 
 
@@ -65,17 +63,17 @@ def delete_employee(name) -> int:
         return cursor.rowcount
 
 
-def search_by_department(department) -> list[float | str]:
+def search_by_department(department) -> list[Row]:
     with get_connection() as conn:
-        rows: list[str | float] = conn.execute(
+        rows: list[Row] = conn.execute(
             "SELECT name, salary FROM employees WHERE department = ? AND active = 1 ORDER BY salary DESC", (department,)
         ).fetchall()
         return rows
 
 
-def get_department_stats() -> list[float | str]:
+def get_department_stats() -> list[Row]:
     with get_connection() as conn:
-        rows: list[str | float] = conn.execute("""
+        rows: list[Row] = conn.execute("""
             SELECT department, COUNT (*) as count,
             AVG (salary) as avg_salary, 
             MIN (salary) as min_salary, 
@@ -132,7 +130,7 @@ if __name__ == "__main__":
     print("\n=== Department Stats ===")
     for dept in get_department_stats():
         print(
-            f"    {dept['department']:12s} |    {dept['count']} employees | avg ${dept['avg_salary']:>10,.2f} | range ${dept['min_salary']:>10,.2f} - ${dept['max_salary']:>10,.2f}"
+            f" {dept['department']:12s} | {dept['count']} employees | avg ${dept['avg_salary']:>10,.2f} | range ${dept['min_salary']:>10,.2f} - ${dept['max_salary']:>10,.2f}"
         )
 
     # Final count
